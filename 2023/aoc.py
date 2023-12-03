@@ -1,8 +1,10 @@
 import sys
+import re
 from pprint import pprint
 from collections import namedtuple
 from functools import reduce
 from operator import mul
+from itertools import repeat
 
 lines = sys.stdin.read().splitlines()
 
@@ -10,6 +12,11 @@ lines = sys.stdin.read().splitlines()
 
 def first(predicate, iterable):
     return next((x for x in iterable if predicate(x)), None)
+
+def max_axis_dist(p1, p2):
+    p1x, p1y = p1
+    p2x, p2y = p2
+    return max(abs(p1x - p2x), abs(p1y - p2y))
 
 # Problem 1
 
@@ -65,7 +72,6 @@ def parse_game(line):
         game_draws.append(game_draw)
     return Game(game_id, game_draws)
 
-games = list(map(parse_game, lines))
 
 REAL_CONTENTS = {
     'red': 12,
@@ -99,5 +105,58 @@ def game_draw_upper_bound(game):
     return reduce(draw_upper_bound, game.draws)
 
 
+# games = list(map(parse_game, lines))
 # print(sum(game.id for game in games if game_is_possible(game)))
 # print(sum(draw_power(game_draw_upper_bound(game)) for game in games))
+
+
+# Problem 2
+
+Number = namedtuple('Number', 'value locs')
+Symbol = namedtuple('Symbol', 'value loc')
+Gear = namedtuple('Gear', 'parts')
+
+
+def parse_numbers(line_number, line):
+    for n in re.finditer(r"\d+", line):
+        yield Number(
+            int(n.group(0)),
+            list(
+                zip(
+                    repeat(line_number),
+                    range(n.start(), n.end())
+                )
+            )
+        )
+
+def parse_symbols(line_number, line):
+    for s in re.finditer(r"[^\d\.]", line):
+        yield Symbol(
+            s.group(0),
+            (line_number, s.start())
+        )
+
+def adjacent(p1, p2):
+    return max_axis_dist(p1, p2) == 1
+
+def adjacent_to_symbol(num, symbol):
+    return any(adjacent(num_loc, symbol.loc) for num_loc in num.locs)
+
+def adjacent_numbers(symbol, numbers):
+    return [number for number in numbers if adjacent_to_symbol(number, symbol)]
+
+def gears(symbols, numbers):
+    for symbol in symbols:
+        if symbol.value == '*':
+            adj = adjacent_numbers(symbol, numbers)
+            if len(adj) == 2:
+                yield Gear([number.value for number in adj])
+
+def gear_ratio(gear):
+    return reduce(mul, gear.parts)
+    
+numbers = [number for line_num, line in enumerate(lines) for number in parse_numbers(line_num, line)]
+symbols = [symbol for line_num, line in enumerate(lines) for symbol in parse_symbols(line_num, line)]
+    
+print(sum(number.value for number in numbers if any(adjacent_to_symbol(number, symbol) for symbol in symbols)))
+print(sum(gear_ratio(gear) for gear in gears(symbols, numbers)))
