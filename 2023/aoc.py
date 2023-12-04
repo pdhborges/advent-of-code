@@ -2,7 +2,7 @@ import sys
 import re
 from pprint import pprint
 from collections import namedtuple
-from functools import reduce
+from functools import reduce, cache
 from operator import mul
 from itertools import repeat
 
@@ -155,8 +155,47 @@ def gears(symbols, numbers):
 def gear_ratio(gear):
     return reduce(mul, gear.parts)
     
-numbers = [number for line_num, line in enumerate(lines) for number in parse_numbers(line_num, line)]
-symbols = [symbol for line_num, line in enumerate(lines) for symbol in parse_symbols(line_num, line)]
-    
-print(sum(number.value for number in numbers if any(adjacent_to_symbol(number, symbol) for symbol in symbols)))
-print(sum(gear_ratio(gear) for gear in gears(symbols, numbers)))
+# numbers = [number for line_num, line in enumerate(lines) for number in parse_numbers(line_num, line)]
+# symbols = [symbol for line_num, line in enumerate(lines) for symbol in parse_symbols(line_num, line)]
+
+# print(sum(number.value for number in numbers if any(adjacent_to_symbol(number, symbol) for symbol in symbols)))
+# print(sum(gear_ratio(gear) for gear in gears(symbols, numbers)))
+
+
+Card = namedtuple('Card', 'index winning_numbers own_numbers')
+
+def parse_card(line_number, line):
+    _, numbers = line.split(': ')
+    winning_numbers, own_numbers = numbers.split(' | ')
+    return Card(
+        line_number,
+        set(map(int, winning_numbers.split())),
+        set(map(int, own_numbers.split())),
+    )
+
+def matching_numbers(card):
+    return len(card.winning_numbers & card.own_numbers)
+
+def card_points(card):
+    m = matching_numbers(card)
+    if not m:
+        return 0
+    return 2**(m - 1)
+
+def count_total_copies(cards):
+    @cache
+    def count_copies(i):
+        m = matching_numbers(cards[i])
+        return 1 + sum(
+            count_copies(j)
+            for j in range(
+                cards[i].index + 1,
+                min(len(cards), cards[i].index + 1 + m)
+            )
+        )
+    return sum(map(count_copies, range(len(cards))))
+
+cards = [parse_card(line_number, line) for line_number, line in enumerate(lines)]
+
+print(sum(map(card_points, cards)))
+print(count_total_copies(cards))
