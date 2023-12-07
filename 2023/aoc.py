@@ -1,12 +1,13 @@
 import sys
 import re
 from pprint import pprint
-from collections import namedtuple
+from collections import namedtuple, deque, Counter
 from functools import reduce, cache
 from operator import mul
-from itertools import repeat
+from itertools import repeat, batched, starmap
 
-lines = sys.stdin.read().splitlines()
+
+# lines = sys.stdin.read().splitlines()
 
 # Utils
 
@@ -110,7 +111,7 @@ def game_draw_upper_bound(game):
 # print(sum(draw_power(game_draw_upper_bound(game)) for game in games))
 
 
-# Problem 2
+# Problem 3
 
 Number = namedtuple('Number', 'value locs')
 Symbol = namedtuple('Symbol', 'value loc')
@@ -161,6 +162,7 @@ def gear_ratio(gear):
 # print(sum(number.value for number in numbers if any(adjacent_to_symbol(number, symbol) for symbol in symbols)))
 # print(sum(gear_ratio(gear) for gear in gears(symbols, numbers)))
 
+# Problem 4
 
 Card = namedtuple('Card', 'index winning_numbers own_numbers')
 
@@ -195,7 +197,177 @@ def count_total_copies(cards):
         )
     return sum(map(count_copies, range(len(cards))))
 
-cards = [parse_card(line_number, line) for line_number, line in enumerate(lines)]
+# cards = [parse_card(line_number, line) for line_number, line in enumerate(lines)]
 
-print(sum(map(card_points, cards)))
-print(count_total_copies(cards))
+# print(sum(map(card_points, cards)))
+# print(count_total_copies(cards))
+
+
+# Problem 5
+
+def intersect(range1, range2):
+    start = max(range1.start, range2.start)
+    end = min(range1.stop, range2.stop)
+    if end > start:
+        return range(start, end)
+    return None
+
+class ProductionMap:
+    def __init__(self, mappings):
+        self.mappings = mappings
+    
+    def map(self, value):
+        for source_range, destination_start in self.mappings:
+            if value in source_range:
+                return destination_start - source_range.start + value
+        return value
+    
+    def map_ranges(self, ranges):
+        to_intersect = deque(ranges)
+        intersected = []
+        while to_intersect:
+            current = to_intersect.popleft()
+            for source_range, destination_start in self.mappings:
+                intersection = intersect(source_range, current)
+                if intersection is not None:
+                    if intersection.start > current.start:
+                        to_intersect.append(range(current.start, intersection.start))
+                    if current.stop > intersection.stop:
+                        to_intersect.append(range(intersection.stop, current.stop))
+                    current = range(
+                        destination_start - source_range.start + intersection.start,
+                        destination_start - source_range.start + intersection.stop
+                    )
+                    break
+            intersected.append(current)
+        return intersected
+
+def read_production_maps():
+    blocks = sys.stdin.read().split('\n\n')
+    iblocks = iter(blocks)
+    seeds = list(map(int, next(iblocks).split(': ')[1].split()))
+    production_maps = []
+    for b in iblocks:
+        lines = b.splitlines()
+        mappings = []
+        for line in lines[1:]:
+            dst_start, source_start, lenght = tuple(map(int, line.split()))
+            mappings.append((range(source_start, source_start + lenght), dst_start))
+        production_maps.append(ProductionMap(mappings))        
+    return seeds, production_maps
+
+#seeds, prod_maps = read_production_maps()
+#seed_ranges = [range(start, start + length) for start, length in batched(seeds, 2)]
+
+def apply_prod_maps(prod_maps, seed):
+    for prod_map in prod_maps:
+        seed = prod_map.map(seed)
+    return seed
+
+def apply_prod_maps_range(prod_maps, seed_ranges):
+    for prod_map in prod_maps:
+        seed_ranges = prod_map.map_ranges(seed_ranges)
+    return seed_ranges
+
+# print(min(apply_prod_maps(prod_maps, seed) for seed in seeds))
+# print(min(seed_range.start for seed_range in apply_prod_maps_range(prod_maps, seed_ranges)))
+
+# Problem 6
+
+Race = namedtuple('Race', 'time hs_distance')
+
+def read_races():
+    times, hs_distances = sys.stdin.read().split('\n')
+    times = map(int, times.split(':')[1].split())
+    hs_distances = map(int, hs_distances.split(':')[1].split())
+    return [Race(time, distance) for time, distance in zip(times, hs_distances)]
+
+def distance(time, hold):
+    return time * hold - hold * hold
+
+def count_ways_to_beat_hs(race):
+    return sum(distance(race.time, hold) > race.hs_distance for hold in range(1, race.time))
+
+#races = read_races()
+# Brute force solves the big input in a couple of seconds no need do quadratics
+# print(reduce(mul, map(count_ways_to_beat_hs, races)))
+
+
+# Problem 7
+
+
+def read_hand_bid_table():
+    lines = sys.stdin.read().split('\n')
+    lines = (line.split() for line in lines)
+    return {tuple(hand): int(bid) for hand, bid in lines}
+
+def hand_type(hand):
+    c = Counter(hand)
+    if len(c) == 1:
+        return 7
+    if len(c) == 2:
+        _, count = c.most_common(1)[0]
+        if count == 4:
+            return 6
+        else:
+            return 5
+    if len(c) == 3:
+        _, count = c.most_common(1)[0]
+        if count == 3:
+            return 4
+        else:
+            return 3
+    if len(c) == 4:
+        return 2
+    return 1
+
+def fuzzy_hand_type(hand):
+    c = Counter(hand)
+    j_count = c.get('J', 0)
+    c.pop('J', None)
+    if len(c) == 1 or len(c) == 0:
+        return 7
+    if len(c) == 2:
+        _, count = c.most_common(1)[0]
+        if count + j_count == 4:
+            return 6
+        else:
+            return 5
+    if len(c) == 3:
+        _, count = c.most_common(1)[0]
+        if count + j_count == 3:
+            return 4
+        else:
+            return 3
+    if len(c) == 4:
+        return 2
+    return 1
+
+CARD_STRENGTH_TABLE = {
+    'A': 14,
+    'K': 13,
+    'Q': 12,
+    # 'J': 11,
+    'T': 10,
+    '9': 9,
+    '8': 8,
+    '7': 7,
+    '6': 6,
+    '5': 5,
+    '4': 4,
+    '3': 3,
+    '2': 2,
+    'J': 1,
+}
+
+def hand_strength(hand):
+    return tuple(map(CARD_STRENGTH_TABLE.get, hand))
+
+def hand_rank(hand):
+    return (fuzzy_hand_type(hand), hand_strength(hand))
+
+hand_bid_table = read_hand_bid_table()
+
+hands = sorted(hand_bid_table, key=hand_rank)
+
+print(sum(hand_bid_table[hand] * (rank + 1) for rank, hand in enumerate(hands)))
